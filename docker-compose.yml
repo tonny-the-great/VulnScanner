@@ -1,0 +1,162 @@
+name: vulnscanner
+
+x-backend-environment: &backend-environment
+  # Local HTTP uses development cookies; remote use requires production + HTTPS.
+  # The application itself defaults to production when ENVIRONMENT is unset.
+  ENVIRONMENT: ${ENVIRONMENT:-development}
+  SESSION_SECRET: ${SESSION_SECRET:?Set SESSION_SECRET in the root .env file}
+  DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-vulnscanner}:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}@postgres:5432/${POSTGRES_DB:-vulnscanner}
+  REDIS_URL: redis://redis:6379/0
+  UPLOAD_DIR: /app/uploads
+  CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:8080 http://127.0.0.1:8080}
+  LLM_PROVIDER: ${LLM_PROVIDER:-anthropic}
+  LLM_MODEL: ${LLM_MODEL:-claude-opus-4-5}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+  SCAN_TIMEOUT: ${SCAN_TIMEOUT:-3600}
+  MAX_TARGETS_PER_SCAN: ${MAX_TARGETS_PER_SCAN:-50}
+  ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+  REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-7}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LOG_FORMAT: ${LOG_FORMAT:-console}
+  # nginx is one trusted hop; use 2 behind the external HTTPS proxy.
+  TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:-1}
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  # Who may sign up and create organizations (see the remote access notes in README.md).
+  ALLOW_SELF_REGISTRATION: ${ALLOW_SELF_REGISTRATION:-true}
+  ORG_CREATION: ${ORG_CREATION:-any_user}
+  # Never scanned, even when authorized. Add this stack's network (docker network
+  # inspect vulnscanner_default) and other internal ranges.
+  SCAN_BLOCKED_NETWORKS: "${SCAN_BLOCKED_NETWORKS:-127.0.0.0/8 ::1/128 0.0.0.0/8 ::/128}"
+  # Empty: API docs follow ENVIRONMENT (off in production).
+  ENABLE_API_DOCS: ${ENABLE_API_DOCS:-}
+  # Optional tuning passed through from .env. Empty values count as unset, so the
+  # application defaults (see backend/.env.example) apply unless you set them.
+  LOGIN_RATE_LIMIT: ${LOGIN_RATE_LIMIT:-}
+  REGISTER_RATE_LIMIT: ${REGISTER_RATE_LIMIT:-}
+  REFRESH_RATE_LIMIT: ${REFRESH_RATE_LIMIT:-}
+  PASSWORD_CHANGE_RATE_LIMIT: ${PASSWORD_CHANGE_RATE_LIMIT:-}
+  LLM_RATE_LIMIT: ${LLM_RATE_LIMIT:-}
+  REPORT_DOWNLOAD_RATE_LIMIT: ${REPORT_DOWNLOAD_RATE_LIMIT:-}
+  PASSWORD_HASH_CONCURRENCY: ${PASSWORD_HASH_CONCURRENCY:-}
+  LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-}
+  SCAN_DNS_TIMEOUT_SECONDS: ${SCAN_DNS_TIMEOUT_SECONDS:-}
+  SCAN_STALE_GRACE_SECONDS: ${SCAN_STALE_GRACE_SECONDS:-}
+  REPORT_JOB_TIMEOUT: ${REPORT_JOB_TIMEOUT:-}
+
+# A worker is healthy while it is registered in Redis under its own container hostname.
+x-worker-healthcheck: &worker-healthcheck
+  test: ["CMD", "python", "-c", "import os, socket, redis; from rq import Worker; c = redis.from_url(os.environ['REDIS_URL']); raise SystemExit(0 if any(w.hostname == socket.gethostname() for w in Worker.all(connection=c)) else 1)"]
+  interval: 30s
+  timeout: 10s
+  start_period: 60s
+  retries: 3
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-vulnscanner}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in the root .env file}
+      POSTGRES_DB: ${POSTGRES_DB:-vulnscanner}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    image: vulnscanner-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      <<: *backend-environment
+      # Optional bootstrap account. No administrator is created by default.
+      FIRST_SUPERUSER_EMAIL: ${FIRST_SUPERUSER_EMAIL:-}
+      FIRST_SUPERUSER_PASSWORD: ${FIRST_SUPERUSER_PASSWORD:-}
+    volumes:
+      - uploads_data:/app/uploads
+    # Readiness checks the database and Redis; nginx does not expose this path.
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/ready', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      start_period: 30s
+      retries: 10
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+
+  # Scan workers. Each runs one scan at a time; SCAN_WORKERS sets how many run in parallel.
+  worker:
+    image: vulnscanner-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *backend-environment
+    volumes:
+      - uploads_data:/app/uploads
+    command: ["sh", "-c", "exec rq worker --url \"$$REDIS_URL\" scans"]
+    deploy:
+      replicas: ${SCAN_WORKERS:-2}
+    # Lets RQ finish its bookkeeping on shutdown; an interrupted scan is closed by the stale-scan reaper.
+    stop_grace_period: 30s
+    healthcheck: *worker-healthcheck
+
+  # Report generation has its own worker so reports never wait behind long scans.
+  report-worker:
+    image: vulnscanner-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment: *backend-environment
+    volumes:
+      - uploads_data:/app/uploads
+    command: ["sh", "-c", "exec rq worker --url \"$$REDIS_URL\" reports"]
+    stop_grace_period: 30s
+    healthcheck: *worker-healthcheck
+
+  frontend:
+    image: nginx:alpine
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8080}:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  redis_data:
+  uploads_data:

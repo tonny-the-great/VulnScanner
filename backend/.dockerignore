@@ -1,0 +1,21 @@
+# Never send local credentials, databases, or development environments to Docker.
+.env
+.env.*
+.venv/
+venv/
+**/__pycache__/
+**/*.pyc
+**/*.db
+**/*.db-wal
+**/*.db-shm
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+uploads/
+tests/
+dist/
+build/
+**/*.egg-info/
+.git/
+.codex/
+.agents/

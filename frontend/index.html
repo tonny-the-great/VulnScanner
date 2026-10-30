@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>VulnScanner | Security Assessment Workspace</title>
+  <meta name="description" content="Manage authorized security scans, review findings, and prepare vulnerability assessment reports.">
+  <meta name="theme-color" content="#07090e">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body class="cyber-theme">
+  <a href="#main-content" class="skip-link">Skip to main content</a>
+  <!-- Toast Container: each toast carries its own status or alert role. -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Shown until the stored session has been checked. -->
+  <div id="session-check" class="session-check" role="status">
+    <span class="spinner" aria-hidden="true"></span>
+    <span>Checking your session…</span>
+  </div>
+  <noscript><p class="session-check">VulnScanner needs JavaScript to run.</p></noscript>
+
+  <!-- Auth Modal (Login / Register) -->
+  <div id="auth-modal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel auth-card" role="dialog" aria-modal="true" aria-labelledby="auth-dialog-title" tabindex="-1">
+      <div class="auth-header">
+        <div class="logo-badge">
+          <div class="shield-pulse"></div>
+          <svg class="shield-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <h2 id="auth-dialog-title">VulnScanner</h2>
+        <p class="subtitle">Your security assessment workspace</p>
+      </div>
+
+      <div class="auth-tabs" aria-label="Account access">
+        <button type="button" id="tab-login-btn" class="auth-tab-btn active" aria-pressed="true" data-action="switch-auth-tab" data-tab="login">Sign In</button>
+        <button type="button" id="tab-register-btn" class="auth-tab-btn" aria-pressed="false" data-action="switch-auth-tab" data-tab="register">Create Account</button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="login-form" class="auth-form">
+        <div class="form-group">
+          <label for="login-email">Email Address</label>
+          <input type="email" id="login-email" required placeholder="analyst@security.org" autocomplete="username">
+        </div>
+        <div class="form-group">
+          <label for="login-password">Password</label>
+          <input type="password" id="login-password" required placeholder="••••••••••••" autocomplete="current-password">
+        </div>
+        <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block">
+          <span class="btn-text">Sign In</span>
+          <span class="spinner hidden" aria-hidden="true"></span>
+        </button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="register-form" class="auth-form hidden">
+        <div class="form-group">
+          <label for="reg-fullname">Full Name</label>
+          <input type="text" id="reg-fullname" required placeholder="Alex Vance" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="reg-email">Email Address</label>
+          <input type="email" id="reg-email" required placeholder="alex@company.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="reg-password">Password (12+ characters)</label>
+          <input type="password" id="reg-password" required minlength="12" placeholder="Minimum 12 characters" autocomplete="new-password">
+        </div>
+        <button type="submit" id="reg-submit-btn" class="btn btn-primary btn-block">
+          <span class="btn-text">Create Account</span>
+          <span class="spinner hidden" aria-hidden="true"></span>
+        </button>
+        <p class="form-hint auth-note">After signing in, create an organization to organize your scans and findings.</p>
+      </form>
+    </div>
+  </div>
+
+  <!-- Application Shell -->
+  <div id="app-shell" class="app-layout hidden">
+    <!-- Sidebar Navigation -->
+    <aside class="sidebar glass-panel">
+      <div class="brand-section">
+        <div class="brand-logo">
+          <svg class="brand-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div class="brand-info">
+          <span class="brand-title">VulnScanner</span>
+          <span class="brand-version">SECURITY WORKSPACE</span>
+        </div>
+      </div>
+
+      <!-- Organization Selector -->
+      <div class="org-selector-container">
+        <label class="section-label" for="active-org-select">Active Organization</label>
+        <div class="select-wrapper">
+          <select id="active-org-select">
+            <option value="">Loading Organizations...</option>
+          </select>
+        </div>
+        <button type="button" class="btn btn-xs btn-ghost mt-1" data-action="open-modal" data-modal="new-org-modal">+ New Organization</button>
+      </div>
+
+      <!-- Navigation Links -->
+      <nav class="nav-menu" aria-label="Workspace navigation">
+        <button type="button" class="nav-item active" data-action="navigate" data-view="dashboard">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+          <span>Dashboard</span>
+        </button>
+        <button type="button" class="nav-item" data-action="navigate" data-view="scans">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12A10 10 0 0 0 12 2v10z"/><path d="M12 22a10 10 0 0 0 10-10H12z"/></svg>
+          <span>Scans & Audits</span>
+        </button>
+        <button type="button" class="nav-item" data-action="navigate" data-view="findings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          <span>Findings & Guidance</span>
+        </button>
+        <button type="button" class="nav-item" data-action="navigate" data-view="assets">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2" ry="2"/><rect x="2" y="14" width="20" height="8" rx="2" ry="2"/><line x1="6" y1="6" x2="6.01" y2="6"/><line x1="6" y1="18" x2="6.01" y2="18"/></svg>
+          <span>Asset Inventory</span>
+        </button>
+        <button type="button" class="nav-item" data-action="navigate" data-view="authorizations">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+          <span>Scope Authorizations</span>
+        </button>
+        <button type="button" class="nav-item" data-action="navigate" data-view="reports">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          <span>Reports Center</span>
+        </button>
+      </nav>
+
+      <!-- Scanner Telemetry Monitor in Sidebar -->
+      <div class="sidebar-telemetry glass-panel-subtle">
+        <div class="telemetry-header">
+          <span class="telemetry-title">Scanner Availability</span>
+          <span id="scanner-health-dot" class="status-indicator" role="img" aria-label="Checking scanner availability"></span>
+        </div>
+        <div id="toolchain-list" class="tool-tags">
+          <span class="tool-tag" id="tool-nmap">Nmap <span class="tag-status">...</span></span>
+          <span class="tool-tag" id="tool-nuclei">Nuclei <span class="tag-status">...</span></span>
+          <span class="tool-tag" id="tool-testssl">TestSSL <span class="tag-status">...</span></span>
+        </div>
+      </div>
+
+      <!-- User Profile & Logout -->
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar" id="user-avatar-initials">U</div>
+          <div class="user-details">
+            <span class="user-name" id="user-display-name">Security Analyst</span>
+            <span class="user-role" id="user-role-badge">Member</span>
+          </div>
+        </div>
+        <button type="button" class="btn-icon" title="Sign out" aria-label="Sign out" data-action="logout">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content Area -->
+    <main id="main-content" class="main-content" tabindex="-1">
+      <!-- Top Bar -->
+      <header class="topbar glass-panel">
+        <div class="topbar-left">
+          <h1 id="page-title" class="page-title" tabindex="-1">Dashboard</h1>
+          <span id="page-subtitle" class="page-subtitle">Security posture overview</span>
+        </div>
+        <div class="topbar-right">
+          <button type="button" id="refresh-data-btn" class="btn btn-ghost" data-action="refresh" aria-label="Refresh organization data">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-svg" aria-hidden="true"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            <span class="btn-text">Refresh</span>
+          </button>
+          <button type="button" id="quick-scan-btn" class="btn btn-primary" data-min-role="analyst" data-action="open-modal" data-modal="new-scan-modal">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-svg"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            <span>Launch New Scan</span>
+          </button>
+        </div>
+      </header>
+
+      <!-- View Containers -->
+      <div class="content-scroll">
+        <!-- 1. DASHBOARD VIEW -->
+        <section id="view-dashboard" class="view-panel active">
+          <div class="workspace-intro">
+            <div>
+              <p class="eyebrow">ASSESS · UNDERSTAND · REMEDIATE</p>
+              <h2>A clearer view of your exposure</h2>
+              <p>Track authorized assessments and prioritize findings with the evidence behind them.</p>
+            </div>
+            <span class="workspace-marker"><span class="status-indicator"></span> Assessment workspace</span>
+          </div>
+          <!-- Stat Metrics Grid -->
+          <div class="metrics-grid">
+            <div class="metric-card glass-panel border-glow-cyan">
+              <div class="metric-icon cyan">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+              </div>
+              <div class="metric-data">
+                <span class="metric-label">Active / Total Scans</span>
+                <span class="metric-value" id="stat-scans-count">0 / 0</span>
+              </div>
+            </div>
+
+            <div class="metric-card glass-panel border-glow-red">
+              <div class="metric-icon red">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/></svg>
+              </div>
+              <div class="metric-data">
+                <span class="metric-label">Critical & High Findings</span>
+                <span class="metric-value text-red" id="stat-critical-count">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card glass-panel border-glow-green">
+              <div class="metric-icon green">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/></svg>
+              </div>
+              <div class="metric-data">
+                <span class="metric-label">Discovered Assets</span>
+                <span class="metric-value text-green" id="stat-assets-count">0</span>
+              </div>
+            </div>
+
+            <div class="metric-card glass-panel border-glow-amber">
+              <div class="metric-icon amber">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+              </div>
+              <div class="metric-data">
+                <span class="metric-label">Authorizations in Scope</span>
+                <span class="metric-value text-amber" id="stat-auth-count">0</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Recent Scans & Vulnerability Breakdown -->
+          <div class="dashboard-columns">
+            <div class="dashboard-col glass-panel">
+              <div class="col-header">
+                <h3>Recent Scan Executions</h3>
+                <button type="button" class="btn btn-xs btn-ghost" data-action="navigate" data-view="scans" aria-label="View all scans">View All</button>
+              </div>
+              <div id="dashboard-recent-scans" class="table-responsive">
+                <div class="empty-state">No scans recorded for this organization.</div>
+              </div>
+            </div>
+
+            <div class="dashboard-col glass-panel">
+              <div class="col-header">
+                <h3>Top Severity Findings</h3>
+                <button type="button" class="btn btn-xs btn-ghost" data-action="navigate" data-view="findings" aria-label="Triage all findings">Triage All</button>
+              </div>
+              <div id="dashboard-top-findings" class="findings-mini-list">
+                <div class="empty-state">No findings recorded yet. Results will appear after an assessment.</div>
+              </div>
+            </div>
+          </div>
+          <div class="assessment-guide glass-panel-subtle">
+            <div class="guide-heading">
+              <h3>Start with an authorized assessment</h3>
+              <p>A scan's coverage and evidence help you interpret its findings.</p>
+            </div>
+            <div class="guide-steps">
+              <button type="button" class="guide-step" data-action="navigate" data-view="authorizations"><span class="step-number">01</span><span><strong>Define your scope</strong><small>Record permission and approved targets</small></span><span class="step-arrow" aria-hidden="true">↗</span></button>
+              <button type="button" class="guide-step" data-action="navigate" data-view="scans"><span class="step-number">02</span><span><strong>Run an assessment</strong><small>Choose a profile and follow its progress</small></span><span class="step-arrow" aria-hidden="true">↗</span></button>
+              <button type="button" class="guide-step" data-action="navigate" data-view="findings"><span class="step-number">03</span><span><strong>Review the evidence</strong><small>Triage findings and plan remediation</small></span><span class="step-arrow" aria-hidden="true">↗</span></button>
+            </div>
+          </div>
+        </section>
+
+        <!-- 2. SCANS & AUDITS VIEW -->
+        <section id="view-scans" class="view-panel">
+          <div class="panel-header-actions">
+            <div>
+              <h2>Security Scans & Assessments</h2>
+              <p class="section-desc">Manage, trigger, and inspect live vulnerability assessment jobs.</p>
+            </div>
+            <button type="button" class="btn btn-primary" data-min-role="analyst" data-action="open-modal" data-modal="new-scan-modal">+ Configure & Run Scan</button>
+          </div>
+
+          <!-- Live Scan Terminal Stream (when active scan selected) -->
+          <div id="live-scan-container" class="live-scan-card glass-panel hidden">
+            <div class="live-scan-header">
+              <div class="live-title-group">
+                <span class="pulse-indicator"></span>
+                <span class="live-title">Live Execution Console: <strong id="live-scan-target">Target</strong></span>
+                <span class="badge badge-info" id="live-scan-status-badge" aria-live="polite">RUNNING</span>
+              </div>
+              <div class="live-actions">
+                <span class="elapsed-timer" id="live-scan-timer">00:00</span>
+                <button type="button" class="btn btn-xs btn-danger" id="cancel-scan-btn" data-action="cancel-scan">Cancel Scan</button>
+                <button type="button" class="btn btn-xs btn-ghost" data-action="close-monitor">Close Monitor</button>
+              </div>
+            </div>
+            <div class="progress-bar-container">
+              <div id="live-scan-progress-bar" class="progress-bar" role="progressbar" aria-label="Scan progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"></div>
+            </div>
+            <pre id="live-scan-console" class="terminal-window" tabindex="0" aria-label="Live scan activity">Connecting to live scan stream...</pre>
+          </div>
+
+          <!-- Historical Scans Table -->
+          <div class="glass-panel mt-3">
+            <div id="scans-table-container" class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Scan ID</th>
+                    <th>Profile</th>
+                    <th>Targets</th>
+                    <th>Status</th>
+                    <th>Findings</th>
+                    <th>Created</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="scans-tbody">
+                  <tr><td colspan="7" class="text-center">Loading scan runs...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 3. FINDINGS & AI TRIAGE VIEW -->
+        <section id="view-findings" class="view-panel">
+          <div class="panel-header-actions">
+            <div>
+              <h2>Vulnerability Findings & AI Remediation</h2>
+              <p class="section-desc">Review scanner evidence, severity, and remediation guidance in one place.</p>
+            </div>
+            <div class="filter-group">
+              <select id="findings-severity-filter" aria-label="Filter by severity">
+                <option value="">All Severities</option>
+                <option value="critical">Critical</option>
+                <option value="high">High</option>
+                <option value="medium">Medium</option>
+                <option value="low">Low</option>
+                <option value="info">Informational</option>
+              </select>
+              <select id="findings-status-filter" aria-label="Filter by finding status">
+                <option value="">All Statuses</option>
+                <option value="open">Open</option>
+                <option value="in_progress">In Progress</option>
+                <option value="fixed">Fixed</option>
+                <option value="accepted_risk">Accepted Risk</option>
+                <option value="false_positive">False Positive</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="glass-panel">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Severity</th>
+                    <th>Vulnerability Title</th>
+                    <th>Target / Host</th>
+                    <th>Port/Proto</th>
+                    <th>Tool</th>
+                    <th>Status</th>
+                    <th>Remediation & Details</th>
+                  </tr>
+                </thead>
+                <tbody id="findings-tbody">
+                  <tr><td colspan="7" class="text-center">Loading findings...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 4. ASSET INVENTORY VIEW -->
+        <section id="view-assets" class="view-panel">
+          <div class="panel-header-actions">
+            <div>
+              <h2>Discovered Assets & Services</h2>
+              <p class="section-desc">Inventory of active IP addresses, hostnames, and exposed network services.</p>
+            </div>
+          </div>
+
+          <div class="glass-panel">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Type</th>
+                    <th>IP Address</th>
+                    <th>Hostname</th>
+                    <th>OS Detection</th>
+                    <th>Open Ports & Services</th>
+                    <th>First Discovered</th>
+                  </tr>
+                </thead>
+                <tbody id="assets-tbody">
+                  <tr><td colspan="6" class="text-center">Loading assets...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 5. SCOPE AUTHORIZATIONS VIEW -->
+        <section id="view-authorizations" class="view-panel">
+          <div class="panel-header-actions">
+            <div>
+              <h2>Scope Authorizations</h2>
+              <p class="section-desc">Record permission, approved targets, and validity dates before launching a scan.</p>
+            </div>
+            <button type="button" class="btn btn-primary" data-min-role="admin" data-action="open-modal" data-modal="new-auth-modal">+ Authorize New Targets</button>
+          </div>
+
+          <div class="glass-panel">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Reference / Signer</th>
+                    <th>Authorized Targets / Scope</th>
+                    <th>Status</th>
+                    <th>Authorized On</th>
+                    <th>Expires</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="authorizations-tbody">
+                  <tr><td colspan="6" class="text-center">Loading authorizations...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+
+        <!-- 6. REPORTS CENTER VIEW -->
+        <section id="view-reports" class="view-panel">
+          <div class="panel-header-actions">
+            <div>
+              <h2>Vulnerability Reports Center</h2>
+              <p class="section-desc">Generate executive summaries and technical vulnerability reports.</p>
+            </div>
+            <button type="button" class="btn btn-primary" data-min-role="analyst" data-action="open-modal" data-modal="new-report-modal">+ Generate New Report</button>
+          </div>
+
+          <div class="glass-panel">
+            <div class="table-responsive">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Title</th>
+                    <th>Report Type</th>
+                    <th>Generated For Scan</th>
+                    <th>Created At</th>
+                    <th>Download / View</th>
+                  </tr>
+                </thead>
+                <tbody id="reports-tbody">
+                  <tr><td colspan="5" class="text-center">Loading generated reports...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- MODAL: Launch Scan -->
+  <div id="new-scan-modal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel modal-lg" role="dialog" aria-modal="true" aria-labelledby="scan-dialog-title" tabindex="-1">
+      <div class="modal-header">
+        <h3 id="scan-dialog-title">Launch Security Scan</h3>
+        <button type="button" class="modal-close" aria-label="Close scan dialog" data-action="close-modal" data-modal="new-scan-modal">&times;</button>
+      </div>
+      <form id="new-scan-form">
+        <div class="form-group">
+          <label for="scan-auth-select">Authorized Scope Reference *</label>
+          <select id="scan-auth-select" required aria-describedby="scan-scope-hint">
+            <option value="">Select approved scope authorization...</option>
+          </select>
+          <small id="scan-scope-hint" class="form-hint">Choose a valid authorization covering every target in this scan.</small>
+          <div id="scan-approved-targets" class="approved-targets hidden" aria-live="polite">
+            <span class="approved-targets-label">Approved targets</span>
+            <ul id="scan-approved-targets-list" class="approved-target-list"></ul>
+            <button type="button" id="use-approved-targets-btn" class="btn btn-xs btn-ghost" data-action="use-approved-targets">Use approved targets</button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="scan-profile-select">Scan Assessment Profile *</label>
+          <select id="scan-profile-select" required>
+            <option value="">Select scanner profile...</option>
+          </select>
+          <div id="profile-description" class="profile-meta-box hidden"></div>
+        </div>
+
+        <div class="form-group">
+          <label for="scan-targets-input">Target Addresses (Separated by space or comma) *</label>
+          <textarea id="scan-targets-input" rows="3" required placeholder="e.g. app.example.com, 192.168.1.10" spellcheck="false" autocapitalize="none" aria-describedby="scan-targets-hint"></textarea>
+          <small id="scan-targets-hint" class="form-hint">Must strictly belong to the authorized targets defined in your selected scope. The server accepts at most 50 targets per scan.</small>
+        </div>
+
+        <div id="intrusive-warning" class="alert-box alert-warning hidden">
+          <strong>⚠️ Intrusive Scan Confirmation Required:</strong>
+          <p>This profile performs active vulnerability testing that may generate significant traffic or trigger alerts. Only authorized administrators may launch this assessment.</p>
+          <label class="checkbox-label">
+            <input type="checkbox" id="intrusive-checkbox">
+            I confirm explicit authorization for intrusive vulnerability testing against these targets.
+          </label>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-action="close-modal" data-modal="new-scan-modal">Cancel</button>
+          <button type="submit" id="start-scan-submit-btn" class="btn btn-primary">
+            <span>Launch Scan</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Create Authorization -->
+  <div id="new-auth-modal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="authorization-dialog-title" tabindex="-1">
+      <div class="modal-header">
+        <h3 id="authorization-dialog-title">Authorize Target Scope</h3>
+        <button type="button" class="modal-close" aria-label="Close authorization dialog" data-action="close-modal" data-modal="new-auth-modal">&times;</button>
+      </div>
+      <form id="new-auth-form">
+        <div class="form-group">
+          <label for="auth-signer-title">Authorization Title *</label>
+          <input type="text" id="auth-signer-title" required minlength="3" maxlength="255" placeholder="e.g. October infrastructure assessment">
+        </div>
+        <div class="form-group">
+          <label for="auth-signer-name">Authorized Signer Name *</label>
+          <input type="text" id="auth-signer-name" required minlength="2" maxlength="255" placeholder="Jane Doe" autocomplete="name">
+        </div>
+        <div class="form-group">
+          <label for="auth-signer-email">Signer Email *</label>
+          <input type="email" id="auth-signer-email" required placeholder="jane.doe@company.com" autocomplete="email">
+        </div>
+        <div class="form-group">
+          <label for="auth-targets">Allowed Targets (IPs, FQDNs, CIDRs separated by space or newline) *</label>
+          <textarea id="auth-targets" rows="3" required placeholder="192.168.1.0/24&#10;security.example.com&#10;10.0.0.50" spellcheck="false" autocapitalize="none"></textarea>
+        </div>
+        <div class="form-row">
+          <div class="form-group col-half">
+            <label for="auth-date">Authorized On *</label>
+            <input type="date" id="auth-date" required>
+          </div>
+          <div class="form-group col-half">
+            <label for="auth-expiration">Expiration Date</label>
+            <input type="date" id="auth-expiration">
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="auth-notes">Scope Notes</label>
+          <textarea id="auth-notes" rows="2" placeholder="Optional limits, contacts, or permitted testing windows"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-action="close-modal" data-modal="new-auth-modal">Cancel</button>
+          <button type="submit" id="create-auth-submit-btn" class="btn btn-primary">Save Authorization</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: Finding Details & AI Remediation -->
+  <div id="finding-detail-modal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel modal-lg" role="dialog" aria-modal="true" aria-labelledby="finding-modal-title" tabindex="-1">
+      <div class="modal-header">
+        <div class="modal-title-with-badge">
+          <span id="finding-modal-severity" class="badge">CRITICAL</span>
+          <h3 id="finding-modal-title">Vulnerability Details</h3>
+        </div>
+        <button type="button" class="modal-close" aria-label="Close finding details" data-action="close-modal" data-modal="finding-detail-modal">&times;</button>
+      </div>
+
+      <div class="finding-modal-content">
+        <div class="finding-meta-grid">
+          <div class="meta-item">
+            <span class="meta-label">Target Host</span>
+            <span class="meta-val" id="finding-modal-target">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">CVSS Base Score</span>
+            <span class="meta-val text-red" id="finding-modal-cvss">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Detected By Tool</span>
+            <span class="meta-val" id="finding-modal-tool">-</span>
+          </div>
+          <div class="meta-item">
+            <span class="meta-label">Port / Protocol</span>
+            <span class="meta-val" id="finding-modal-port">-</span>
+          </div>
+        </div>
+
+        <div class="finding-section">
+          <h4>Vulnerability Description</h4>
+          <p id="finding-modal-desc" class="desc-text">-</p>
+        </div>
+
+        <div class="finding-section" id="finding-evidence-section">
+          <h4>Scanner Evidence</h4>
+          <pre id="finding-modal-evidence" class="code-preview" tabindex="0" aria-label="Scanner evidence">-</pre>
+        </div>
+
+        <!-- AI Remediation Guidance Section -->
+        <div class="ai-guidance-container glass-panel-subtle">
+          <div class="ai-guidance-header">
+            <div class="ai-brand">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="ai-icon">
+                <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+              </svg>
+              <span>AI Remediation Guidance</span>
+            </div>
+            <button type="button" id="fetch-ai-fix-btn" class="btn btn-xs btn-ai" data-action="generate-remediation">
+              <span>Generate Guidance</span>
+              <span class="spinner hidden" aria-hidden="true"></span>
+            </button>
+          </div>
+          <div id="ai-remediation-body" class="ai-body">
+            <p class="placeholder-text">Generate suggested remediation steps and validate them against your environment before applying changes.</p>
+          </div>
+        </div>
+        <div class="finding-section triage-controls">
+          <h4>Finding Status</h4>
+          <div class="form-group">
+            <label for="update-finding-status-select">Triage Status</label>
+            <select id="update-finding-status-select">
+              <option value="open">Open</option>
+              <option value="in_progress">In Progress</option>
+              <option value="fixed">Fixed</option>
+              <option value="accepted_risk">Accepted Risk</option>
+              <option value="false_positive">False Positive</option>
+            </select>
+          </div>
+          <div id="finding-status-reason-group" class="form-group hidden">
+            <label for="status-reason-input">Reason for Accepting Risk *</label>
+            <textarea id="status-reason-input" rows="3" placeholder="Explain the decision, compensating controls, and review plan"></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" data-action="close-modal" data-modal="finding-detail-modal">Close</button>
+        <button type="button" id="save-finding-status-btn" class="btn btn-primary" data-action="save-finding-status">Save Status</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: Generate Report -->
+  <div id="new-report-modal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="report-dialog-title" tabindex="-1">
+      <div class="modal-header">
+        <h3 id="report-dialog-title">Generate Vulnerability Report</h3>
+        <button type="button" class="modal-close" aria-label="Close report dialog" data-action="close-modal" data-modal="new-report-modal">&times;</button>
+      </div>
+      <form id="new-report-form">
+        <div class="form-group">
+          <label for="report-scan-select">Assessment Scope</label>
+          <select id="report-scan-select">
+            <option value="">All organization findings</option>
+          </select>
+          <small class="form-hint">Choose a specific scan to report on its findings and execution coverage.</small>
+        </div>
+        <div class="form-group">
+          <label for="report-type-select">Report Type *</label>
+          <select id="report-type-select" required>
+            <option value="executive">Executive Summary (Risk & metrics)</option>
+            <option value="technical">Technical Assessment (Findings & evidence)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="report-title-input">Report Title</label>
+          <input type="text" id="report-title-input" placeholder="e.g. Q4 Infrastructure Security Assessment">
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-action="close-modal" data-modal="new-report-modal">Cancel</button>
+          <button type="submit" id="create-report-submit-btn" class="btn btn-primary">Generate Report</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- MODAL: New Organization -->
+  <div id="new-org-modal" class="modal-backdrop hidden">
+    <div class="modal-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="organization-dialog-title" tabindex="-1">
+      <div class="modal-header">
+        <h3 id="organization-dialog-title">Create Organization</h3>
+        <button type="button" class="modal-close" aria-label="Close organization dialog" data-action="close-modal" data-modal="new-org-modal">&times;</button>
+      </div>
+      <form id="new-org-form">
+        <div class="form-group">
+          <label for="org-name-input">Organization Name *</label>
+          <input type="text" id="org-name-input" required placeholder="Acme Cyber Security Corp">
+        </div>
+        <div class="form-group">
+          <label for="org-slug-input">Organization Slug</label>
+          <input type="text" id="org-slug-input" placeholder="Optional: generated from organization name" pattern="[a-z0-9]+(?:-[a-z0-9]+)*" autocomplete="off" spellcheck="false" autocapitalize="none">
+          <small class="form-hint">Use lowercase letters, numbers, and hyphens.</small>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" data-action="close-modal" data-modal="new-org-modal">Cancel</button>
+          <button type="submit" id="create-org-submit-btn" class="btn btn-primary">Create Organization</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

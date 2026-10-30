@@ -1,0 +1,14 @@
+backend/.venv/
+**/__pycache__/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.pyc
+**/*.db
+**/*.db-wal
+**/*.db-shm
+backend/.env
+.env
+backend/uploads/
+**/dist/
+**/*.egg-info/
+*.log

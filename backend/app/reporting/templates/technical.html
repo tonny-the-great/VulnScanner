@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>{{ report.title }} - Technical Assessment Report</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; margin: 40px; color: #1e293b; background: #fff; line-height: 1.5; }
+    .header { border-bottom: 2px solid #e2e8f0; padding-bottom: 20px; margin-bottom: 30px; }
+    h1 { margin: 0 0 10px 0; color: #0f172a; font-size: 26px; }
+    .meta { color: #64748b; font-size: 14px; }
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+    .critical { background: #fee2e2; color: #991b1b; }
+    .high { background: #ffedd5; color: #9a3412; }
+    .medium { background: #fef9c3; color: #854d0e; }
+    .low { background: #e0f2fe; color: #075985; }
+    .info { background: #f1f5f9; color: #475569; }
+    .finding-box { border: 1px solid #e2e8f0; border-radius: 8px; margin-bottom: 24px; padding: 20px; background: #fafafa; }
+    .finding-header { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; }
+    .finding-title { font-size: 18px; font-weight: 700; color: #0f172a; }
+    .evidence { background: #0f172a; color: #f8fafc; padding: 12px; border-radius: 6px; font-family: monospace; font-size: 12px; overflow-x: auto; white-space: pre-wrap; margin-top: 10px; }
+    .remediation-box { background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 14px; margin-top: 12px; }
+    .footer { margin-top: 50px; font-size: 12px; color: #94a3b8; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 20px; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>{{ report.title }}</h1>
+    <div class="meta">
+      Organization: <strong>{{ org.name }}</strong> | Generated: {{ report.generated_at.strftime('%Y-%m-%d %H:%M UTC') }}
+    </div>
+  </div>
+
+  {% if scan %}
+  <p><strong>Scan status:</strong> {{ scan.status.value }}</p>
+  {% if scan.status.value != 'completed' %}
+  <p><strong>Incomplete assessment.</strong> These are partial results and do not establish that the targets are free of vulnerabilities.</p>
+  {% endif %}
+  {% else %}
+  <p><strong>Recorded scan coverage:</strong> {{ completed_scan_count }} of {{ scan_count }} scans completed.</p>
+  {% if completed_scan_count == 0 %}
+  <p><strong>Assessment coverage needed.</strong> No completed assessments are recorded for this organization. Complete the required authorized scans before drawing conclusions about its security.</p>
+  {% endif %}
+  {% endif %}
+  {% if missing_snapshot_count %}
+  <p><strong>Historical finding snapshots are unavailable</strong> for {{ missing_snapshot_count }} finding(s). Their severity, priority and status show current finding state, which may have changed after this scan.</p>
+  {% endif %}
+  <h2>Detailed Findings & Remediation Guidance</h2>
+
+  {% for f in findings %}
+  <div class="finding-box">
+    <div class="finding-header">
+      <div class="finding-title">{{ f.title }}</div>
+      <div>
+        <span class="badge {{ f.severity.value }}">{{ f.severity.value }}</span>
+        {% if f.priority_score %}
+        <span style="font-size: 13px; font-weight: 600; margin-left: 8px;">Priority: {{ f.priority_score }}/10</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <p>{{ f.description or 'No description provided.' }}</p>
+
+    <div style="font-size: 13px; color: #475569; margin: 8px 0;">
+      <strong>Source Tool:</strong> {{ f.source_tool }} |
+      <strong>Confidence:</strong> {{ f.confidence.value }} |
+      <strong>{% if scan and f.snapshot_available %}Status at observation:{% else %}Status:{% endif %}</strong> {{ f.status.value }}
+      {% if f.cve_ids %} | <strong>CVEs:</strong> {{ f.cve_ids|join(', ') }}{% endif %}
+      {% if f.cwe_ids %} | <strong>CWEs:</strong> {{ f.cwe_ids|join(', ') }}{% endif %}
+    </div>
+
+    {% if f.llm_remediation %}
+    <div class="remediation-box">
+      {% if f.llm_remediation.get('source', 'unknown') != 'llm' %}
+      <p><strong>Generic or unverified guidance:</strong> Confirm applicability before making changes.</p>
+      {% endif %}
+      <strong>{% if scan %}Current Remediation Summary (separate from the scan observation):{% else %}Remediation Summary:{% endif %}</strong>
+      <p style="margin: 4px 0 10px 0;">{{ f.llm_remediation.summary }}</p>
+      {% if f.llm_remediation.remediation_steps %}
+      <ol style="margin: 0; padding-left: 20px;">
+        {% for step in f.llm_remediation.remediation_steps %}
+        <li>
+          <strong>{{ step.title }}</strong>: {{ step.description }}
+          {% if step.commands_or_code %}
+          <div style="font-family: monospace; background: #e2e8f0; padding: 4px 8px; border-radius: 4px; margin-top: 4px;">{{ step.commands_or_code }}</div>
+          {% endif %}
+        </li>
+        {% endfor %}
+      </ol>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    {% set finding_evidence = evidence_by_finding.get(f.id, []) %}
+    {% if finding_evidence %}
+    <h4 style="margin: 14px 0 6px 0;">Proof of Vulnerability (Scanner Evidence)</h4>
+    {% for ev in finding_evidence %}
+    <div class="evidence">{{ ev.content }}</div>
+    {% endfor %}
+    {% endif %}
+  </div>
+  {% else %}
+  <p>No findings are recorded in this report. Review assessment coverage and complete the required authorized scans before drawing conclusions about security.</p>
+  {% endfor %}
+
+  <div class="footer">
+    Technical Vulnerability Assessment Report • Authorized Organizational Use Only • Generated by VulnScanner
+  </div>
+</body>
+</html>
