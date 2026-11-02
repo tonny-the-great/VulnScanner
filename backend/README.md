@@ -60,7 +60,8 @@ credentials or default signing/database secrets.
   after it started belongs to a worker that died; it is marked failed (or
   cancelled, if cancellation was requested) at API startup and whenever a worker
   picks up a scan. Each closure adds a scan event and an audit entry.
-- **Startup.** Missing tables and indexes are created, built-in scan profiles are
+- **Startup.** Pending database migrations are applied (Alembic, in
+  `app/migrations`), built-in scan profiles are
   synchronized with `app/scanning/profiles.py` (an operator's choice to disable
   one is kept), and the optional bootstrap superuser is created. Its email is
   stored in lowercase, and its password must satisfy the password policy.
@@ -132,11 +133,27 @@ Accepted risk requires a reason. Signed-in members download reports at
 organization prefix. Expiring token links,
 `/api/v1/reports/download/{token}/html`, remain available for sharing.
 
+## Database changes
+
+The schema is versioned with Alembic (`app/migrations`), and the API applies
+pending migrations at startup. After changing a model, generate a migration and
+review it before committing:
+
+```powershell
+.\.venv\Scripts\python.exe -m alembic revision --autogenerate -m "describe the change"
+```
+
+The tests fail if the models and the migrations disagree. SQLite cannot alter most
+columns in place; generated migrations use batch mode, which rebuilds the table.
+
 ## Checks
 
 ```powershell
 .\.venv\Scripts\python.exe -m pytest -q
 ```
+
+Migration tests also run against PostgreSQL when `VULNSCANNER_TEST_POSTGRES_URL`
+names a disposable database (its `public` schema is dropped).
 
 From the project root, with Node installed:
 
@@ -157,8 +174,6 @@ place. Known gaps:
 
 - The concurrency limit is atomic on PostgreSQL (row lock); on SQLite, used for
   development, it is best-effort.
-- No versioned database migrations: new tables and indexes are created at
-  startup, but changes to existing columns or constraints need manual SQL.
 - Host names are checked against blocked networks when a scan starts, but the
   scanners resolve them again, so DNS rebinding between the two is not caught.
 - The event stream assumes events are written in timestamp order; an event

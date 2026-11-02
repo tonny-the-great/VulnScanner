@@ -50,6 +50,7 @@ COPY pyproject.toml README.md ./
 RUN mkdir app && touch app/__init__.py && \
     pip install --no-cache-dir ".[postgres,reporting,llm]"
 # Runtime integrations only; no developer or test dependencies.
+COPY alembic.ini ./
 COPY app ./app
 RUN pip install --no-cache-dir --no-deps .
 

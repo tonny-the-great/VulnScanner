@@ -23,12 +23,12 @@ import pytest  # noqa: E402
 from sqlalchemy import event  # noqa: E402
 
 from app.database import SessionLocal, engine  # noqa: E402
-from app.models import Base  # noqa: E402
+from app.migrations import upgrade_database  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
 def setup_test_db():
-    Base.metadata.create_all(bind=engine)
+    upgrade_database(engine)
     yield
     # Cleanup after test run
     engine.dispose()

@@ -3,18 +3,17 @@
 import uuid
 
 from fastapi.testclient import TestClient
-from sqlalchemy import inspect, select, text
+from sqlalchemy import select
 from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
 from app.core.audit import audit_log
 from app.core.security import hash_password
 from app.core.security_headers import CONSOLE_CSP
-from app.database import engine, get_db
+from app.database import get_db
 from app.main import (
     app,
     create_app,
-    ensure_indexes,
     log_configuration_warnings,
     seed_database,
     sync_system_profiles,
@@ -104,19 +103,6 @@ def test_bootstrap_superuser_with_weak_password_is_not_created(db, monkeypatch):
     monkeypatch.setattr(get_settings(), "FIRST_SUPERUSER_PASSWORD", "short")
     seed_database()
     assert db.scalars(select(User).where(User.email == email)).first() is None
-
-
-def test_ensure_indexes_is_idempotent_and_restores_missing_indexes():
-    with engine.begin() as conn:
-        conn.execute(text("DROP INDEX IF EXISTS ix_scan_events_scan_id_created_at"))
-    ensure_indexes()
-    ensure_indexes()
-    inspector = inspect(engine)
-    assert "ix_scan_events_scan_id_created_at" in {
-        ix["name"] for ix in inspector.get_indexes("scan_events")
-    }
-    assert "ix_findings_org_priority" in {ix["name"] for ix in inspector.get_indexes("findings")}
-    assert "scan_findings" in inspector.get_table_names()
 
 
 def test_security_headers_on_console_and_api():

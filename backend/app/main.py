@@ -28,7 +28,7 @@ from app.core.request_context import RequestContextMiddleware
 from app.core.security import hash_password
 from app.core.security_headers import SecurityHeadersMiddleware
 from app.database import engine, get_db_context
-from app.models import Base
+from app.migrations import upgrade_database
 from app.models.scan import ScanProfile
 from app.models.user import User
 from app.routers import (
@@ -59,22 +59,6 @@ _SYNCED_PROFILE_FIELDS = (
     "is_intrusive",
     "config_json",
 )
-
-
-def ensure_indexes() -> None:
-    """Create indexes missing from an existing database.
-
-    create_all() only creates missing tables, so indexes added to existing tables
-    would otherwise never reach a database created by an earlier version.
-    """
-    for table in Base.metadata.sorted_tables:
-        for index in table.indexes:
-            try:
-                index.create(bind=engine, checkfirst=True)
-            except Exception:
-                logger.warning(
-                    "Could not create index %s on %s", index.name, table.name, exc_info=True
-                )
 
 
 def sync_system_profiles(db: Session) -> list[str]:
@@ -141,9 +125,8 @@ def _bootstrap_superuser(db: Session) -> None:
 
 
 def seed_database() -> None:
-    """Initialize the DB schema, built-in scan profiles and the bootstrap superuser."""
-    Base.metadata.create_all(bind=engine)
-    ensure_indexes()
+    """Apply database migrations, then sync built-in scan profiles and the bootstrap superuser."""
+    upgrade_database(engine)
     with get_db_context() as db:
         sync_system_profiles(db)
         _bootstrap_superuser(db)

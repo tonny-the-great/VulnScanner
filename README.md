@@ -45,7 +45,7 @@ docker compose logs --tail=100 api worker report-worker frontend
 docker compose down
 ```
 
-Stopping the stack keeps database, queue, authorization, and report volumes. Avoid `docker compose down -v` unless you intend to permanently remove those volumes. Keep backups before upgrades: the app creates missing tables and indexes at startup but does not provide a versioned database migration workflow. Built-in scan profiles are updated to the current definitions at each API start; a profile you disabled stays disabled.
+Stopping the stack keeps database, queue, authorization, and report volumes. Avoid `docker compose down -v` unless you intend to permanently remove those volumes. The API applies pending database migrations when it starts, so an upgrade only needs `docker compose up --build -d`; keep a backup before upgrading anyway (`docker compose exec postgres pg_dump -U vulnscanner vulnscanner > backup.sql`). Built-in scan profiles are updated to the current definitions at each API start; a profile you disabled stays disabled.
 
 Set `LOG_FORMAT=json` for one JSON object per log line, for log collectors. Audit log lines identify actors by id; email addresses stay in the database.
 
@@ -75,6 +75,7 @@ Signed-in users download reports at `/api/v1/organizations/{organization_id}/rep
 
 ## Upgrading from an earlier version
 
+- Databases created before migrations were introduced are adopted at the first start: missing tables and indexes are added and existing data is kept. Back up first.
 - Every user signs in once after the upgrade: earlier tokens carry no password binding and are refused.
 - The refresh cookie moved from `/` to `/api/v1/auth`; the old cookie is removed at the next sign-in or refresh.
 - Finding lists (`/findings`, `/assets/{id}/findings`) return summaries without evidence or notes; fetch `/findings/{id}` for those. Asset findings, reports and authorizations are paginated with `limit` and `offset`.
